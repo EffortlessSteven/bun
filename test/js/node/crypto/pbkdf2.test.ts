@@ -133,3 +133,51 @@ describe("invalid inputs", () => {
     );
   });
 });
+
+// Async `crypto.pbkdf2` snapshots its password/salt at submission time. Safe JS
+// can back either input with a resizable ArrayBuffer and resize it to zero
+// before the worker runs; the derived key must still match the originally
+// submitted bytes instead of reading a stale descriptor. The backing is sized
+// so the post-schedule resize deterministically lands before the worker's read.
+const PBKDF2_ITERATIONS = 2;
+const PBKDF2_KEYLEN = 32;
+const PBKDF2_DIGEST = "sha256";
+const PBKDF2_RAB_SIZE = 4 * 1024 * 1024;
+
+test("pbkdf2 async snapshots a resizable-ArrayBuffer-backed password", async () => {
+  const salt = Buffer.alloc(16, 0x42);
+  const rab = new ArrayBuffer(PBKDF2_RAB_SIZE, { maxByteLength: PBKDF2_RAB_SIZE });
+  const password = new Uint8Array(rab);
+  password.fill(0x41);
+  const original = Buffer.from(password);
+  const expected = crypto.pbkdf2Sync(original, salt, PBKDF2_ITERATIONS, PBKDF2_KEYLEN, PBKDF2_DIGEST);
+
+  const { promise, resolve, reject } = Promise.withResolvers();
+  crypto.pbkdf2(password, salt, PBKDF2_ITERATIONS, PBKDF2_KEYLEN, PBKDF2_DIGEST, (err, key) =>
+    err ? reject(err) : resolve(key),
+  );
+  rab.resize(0);
+
+  const key = await promise;
+  expect(rab.byteLength).toBe(0);
+  expect(key).toEqual(expected);
+});
+
+test("pbkdf2 async snapshots a resizable-ArrayBuffer-backed salt", async () => {
+  const password = Buffer.alloc(64, 0x41);
+  const rab = new ArrayBuffer(PBKDF2_RAB_SIZE, { maxByteLength: PBKDF2_RAB_SIZE });
+  const salt = new Uint8Array(rab);
+  salt.fill(0x42);
+  const original = Buffer.from(salt);
+  const expected = crypto.pbkdf2Sync(password, original, PBKDF2_ITERATIONS, PBKDF2_KEYLEN, PBKDF2_DIGEST);
+
+  const { promise, resolve, reject } = Promise.withResolvers();
+  crypto.pbkdf2(password, salt, PBKDF2_ITERATIONS, PBKDF2_KEYLEN, PBKDF2_DIGEST, (err, key) =>
+    err ? reject(err) : resolve(key),
+  );
+  rab.resize(0);
+
+  const key = await promise;
+  expect(rab.byteLength).toBe(0);
+  expect(key).toEqual(expected);
+});
