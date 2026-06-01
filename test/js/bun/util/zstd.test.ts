@@ -409,3 +409,26 @@ describe.concurrent("Zstandard HTTP compression", () => {
     expect(echoed).toBe(testString);
   });
 });
+
+describe("zstdCompress with a resizable ArrayBuffer input", () => {
+  // Async zstdCompress snapshots its input at submission time. Safe JS can back
+  // the input with a resizable ArrayBuffer and resize it to zero before the
+  // worker runs; compression must use the originally submitted bytes instead of
+  // reading a stale descriptor. The backing is sized so the post-schedule resize
+  // deterministically lands before the worker's read.
+  it("snapshots the submitted bytes when the backing is resized after scheduling", async () => {
+    const size = 4 * 1024 * 1024;
+    const rab = new ArrayBuffer(size, { maxByteLength: size });
+    const view = new Uint8Array(rab);
+    view.fill(0x41);
+    const original = Buffer.from(view);
+    const expected = zstdCompressSync(original, { level: 3 });
+
+    const pending = zstdCompress(view, { level: 3 });
+    rab.resize(0);
+
+    const actual = await pending;
+    expect(rab.byteLength).toBe(0);
+    expect(actual).toEqual(expected);
+  });
+});
