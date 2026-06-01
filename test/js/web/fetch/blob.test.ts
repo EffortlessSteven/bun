@@ -556,3 +556,47 @@ describe("slice bounds are respected when streaming and serving", () => {
     expect(await get.text()).toBe("3456");
   });
 });
+
+test("Blob snapshots a nonzero-offset SharedArrayBuffer view", async () => {
+  // SharedArrayBuffer-backed parts are snapshotted before Blob byte
+  // materialization, so only the view's range is copied. The 0xff guard bytes
+  // around the view must not appear in the Blob.
+  const sab = new SharedArrayBuffer(16);
+  const bytes = new Uint8Array(sab);
+  bytes.fill(0xff);
+  bytes.set([1, 2, 3, 4], 6);
+
+  const blob = new Blob([new Uint8Array(sab, 6, 4)]);
+  expect(Array.from(new Uint8Array(await blob.arrayBuffer()))).toEqual([1, 2, 3, 4]);
+});
+
+test("Blob snapshots SharedArrayBuffer parts in multi-part blobs", async () => {
+  const sab = new SharedArrayBuffer(16);
+  const bytes = new Uint8Array(sab);
+  bytes.fill(0xff);
+  bytes.set([1, 2, 3, 4], 6);
+
+  const blob = new Blob([new Uint8Array(sab, 6, 4), "x"]);
+  expect(Array.from(new Uint8Array(await blob.arrayBuffer()))).toEqual([1, 2, 3, 4, 120]);
+});
+
+test("Blob snapshots multiple SharedArrayBuffer parts", async () => {
+  const sab = new SharedArrayBuffer(16);
+  const bytes = new Uint8Array(sab);
+  bytes.fill(0xff);
+  bytes.set([1, 2], 4);
+  bytes.set([3, 4], 10);
+
+  const blob = new Blob([new Uint8Array(sab, 4, 2), new Uint8Array(sab, 10, 2)]);
+  expect(Array.from(new Uint8Array(await blob.arrayBuffer()))).toEqual([1, 2, 3, 4]);
+});
+
+test("Blob snapshots DataView parts over SharedArrayBuffer", async () => {
+  const sab = new SharedArrayBuffer(16);
+  const bytes = new Uint8Array(sab);
+  bytes.fill(0xff);
+  bytes.set([5, 6, 7], 8);
+
+  const blob = new Blob([new DataView(sab, 8, 3)]);
+  expect(Array.from(new Uint8Array(await blob.arrayBuffer()))).toEqual([5, 6, 7]);
+});
