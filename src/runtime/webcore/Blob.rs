@@ -3413,12 +3413,17 @@ impl BlobExt for Blob {
                 | jsc::JSType::BigInt64Array
                 | jsc::JSType::BigUint64Array
                 | jsc::JSType::DataView => {
-                    return Blob::try_create(
-                        top_value.as_array_buffer(global).unwrap().byte_slice(),
-                        global,
-                        false,
-                    )
-                    .map_err(Into::into);
+                    let array_buffer = top_value.as_array_buffer(global).unwrap();
+                    // Shared/resizable JS backing stores are not stable enough for a
+                    // Rust `&[u8]`. Snapshot before Blob materialization; fixed
+                    // unshared inputs keep the borrowed path.
+                    let stable = if array_buffer.shared || array_buffer.resizable {
+                        snapshot_shared_array_buffer(global, &array_buffer)?
+                    } else {
+                        array_buffer
+                    };
+                    return Blob::try_create(stable.byte_slice(), global, false)
+                        .map_err(Into::into);
                 }
 
                 jsc::JSType::DOMWrapper => {
@@ -3611,7 +3616,13 @@ impl BlobExt for Blob {
                                 | jsc::JSType::DataView => {
                                     could_have_non_ascii = true;
                                     let buf = item.as_array_buffer(global).unwrap();
-                                    if parts_can_run_js {
+                                    if buf.shared || buf.resizable {
+                                        // Shared/resizable backing stores are not stable
+                                        // enough for a Rust `&[u8]`; snapshot before
+                                        // reading the bytes into the joiner.
+                                        let snapshot = snapshot_shared_array_buffer(global, &buf)?;
+                                        joiner.push_cloned(snapshot.byte_slice());
+                                    } else if parts_can_run_js {
                                         // A later part may run user JS that detaches
                                         // or resizes this buffer before `done()`.
                                         joiner.push_cloned(buf.byte_slice());
@@ -7431,5 +7442,33 @@ pub mod external_shared_descriptor {
 /// struct into `bun_jsc::webcore_types`, so the canonical alias lives in
 /// `bun_jsc::bindgen`; re-export it here for `bun_runtime` callers.
 pub use bun_jsc::bindgen::BindgenBlob;
+
+/// Copy a `SharedArrayBuffer`, growable `SharedArrayBuffer`, or resizable
+/// `ArrayBuffer` into a fresh, non-shared `ArrayBuffer` so the Blob byte source
+/// is never materialized as a `&[u8]` over memory another agent can mutate. The
+/// copy is performed in C++ (`Bun__createArrayBufferForCopy`), so Rust never
+/// reads the shared source bytes through a slice. The returned `ArrayBuffer`
+/// owns the copy's JS value, keeping it alive for the duration of the borrow.
+fn snapshot_shared_array_buffer(
+    global: &JSGlobalObject,
+    array_buffer: &jsc::ArrayBuffer,
+) -> JsResult<jsc::ArrayBuffer> {
+    let copy = bun_jsc::from_js_host_call(global, || unsafe {
+        Bun__createArrayBufferForCopy(global, array_buffer.ptr.cast(), array_buffer.byte_len)
+    })?;
+    copy.as_array_buffer(global).ok_or_else(|| {
+        global.throw_invalid_arguments(format_args!(
+            "Failed to snapshot shared ArrayBuffer for Blob"
+        ))
+    })
+}
+
+unsafe extern "C" {
+    fn Bun__createArrayBufferForCopy(
+        global: *const JSGlobalObject,
+        ptr: *const c_void,
+        len: usize,
+    ) -> JSValue;
+}
 
 // ported from: src/runtime/webcore/Blob.zig
