@@ -5193,6 +5193,15 @@ pub fn write_file_internal(
                 }
             } else if let Some(buffer_view) = data.as_array_buffer(global_this) {
                 if buffer_view.byte_len < 256 * 1024 {
+                    // Shared/resizable JS backing is not stable enough for a Rust
+                    // `&[u8]`; snapshot it into owned bytes before this small-buffer
+                    // fast path borrows the slice. Fixed unshared input keeps the
+                    // borrowed path. Exact byteOffset/byteLength are preserved.
+                    let stable = if buffer_view.shared || buffer_view.resizable {
+                        buffer_view.copy_to_unshared(global_this)?
+                    } else {
+                        buffer_view
+                    };
                     let pathlike: PathOrFileDescriptor = match &*path_or_blob {
                         PathOrBlob::Path(p) => p.clone(),
                         PathOrBlob::Blob(b) => b
@@ -5207,14 +5216,14 @@ pub fn write_file_internal(
                         write_bytes_to_file_fast::<true>(
                             global_this,
                             &pathlike,
-                            buffer_view.byte_slice(),
+                            stable.byte_slice(),
                             &mut needs_async,
                         )
                     } else {
                         write_bytes_to_file_fast::<false>(
                             global_this,
                             &pathlike,
-                            buffer_view.byte_slice(),
+                            stable.byte_slice(),
                             &mut needs_async,
                         )
                     };

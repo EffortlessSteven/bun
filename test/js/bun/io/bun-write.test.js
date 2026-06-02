@@ -595,3 +595,34 @@ const IS_UV_FS_COPYFILE_DISABLED =
     expect(f.name).toBe(filePath);
   });
 });
+
+// Acceptance/behavior coverage for the small-buffer (<256 KiB) local-file fast
+// path with SharedArrayBuffer- and resizable-ArrayBuffer-backed input. Such
+// backing is copied before Rust borrows it as a &[u8] (a shared-aliasing UB that
+// Miri catches but JS cannot observe, since the bytes are written synchronously);
+// these assert the observable contract: exactly the view's range is written.
+describe.concurrent("Bun.write shared/resizable input (stable bytes)", () => {
+  test("writes a nonzero-offset SharedArrayBuffer view", async () => {
+    using dir = tempDir("bun-write-sab", {});
+    const file = join(String(dir), "sab.bin");
+    const sab = new SharedArrayBuffer(16);
+    const bytes = new Uint8Array(sab);
+    bytes.fill(0xff);
+    bytes.set([1, 2, 3, 4], 6);
+
+    await Bun.write(file, new Uint8Array(sab, 6, 4));
+    expect([...new Uint8Array(await Bun.file(file).arrayBuffer())]).toEqual([1, 2, 3, 4]);
+  });
+
+  test("writes a resizable ArrayBuffer view", async () => {
+    using dir = tempDir("bun-write-rab", {});
+    const file = join(String(dir), "rab.bin");
+    const rab = new ArrayBuffer(16, { maxByteLength: 1024 });
+    const bytes = new Uint8Array(rab);
+    bytes.fill(0xff);
+    bytes.set([5, 6, 7], 8);
+
+    await Bun.write(file, new Uint8Array(rab, 8, 3));
+    expect([...new Uint8Array(await Bun.file(file).arrayBuffer())]).toEqual([5, 6, 7]);
+  });
+});
