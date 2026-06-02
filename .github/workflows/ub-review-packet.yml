@@ -22,6 +22,7 @@ defaults:
 jobs:
   packet:
     name: UB evidence packet / gh-runner
+    if: github.repository == 'EffortlessSteven/bun'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
