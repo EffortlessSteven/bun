@@ -4376,6 +4376,7 @@ describe("scalar write with a resizable ArrayBuffer resized after scheduling", (
       const { rab, view, expected } = makeView(0x41);
       const p = promises.write(fd, view, 0, view.byteLength, 0);
       rab.resize(0);
+      expect(view.byteLength).toBe(0);
       await p;
       expect(readFileSync(file).equals(expected)).toBe(true);
     } finally {
@@ -4392,6 +4393,7 @@ describe("scalar write with a resizable ArrayBuffer resized after scheduling", (
       const { promise, resolve, reject } = Promise.withResolvers<void>();
       fs.write(fd, view, 0, view.byteLength, 0, err => (err ? reject(err) : resolve()));
       rab.resize(0);
+      expect(view.byteLength).toBe(0);
       await promise;
       expect(readFileSync(file).equals(expected)).toBe(true);
     } finally {
@@ -4407,6 +4409,7 @@ describe("scalar write with a resizable ArrayBuffer resized after scheduling", (
       const { rab, view, expected } = makeView(0x43);
       const p = fh.write(view, 0, view.byteLength, 0);
       rab.resize(0);
+      expect(view.byteLength).toBe(0);
       await p;
       expect(readFileSync(file).equals(expected)).toBe(true);
     } finally {
@@ -4425,6 +4428,7 @@ describe("scalar write with a resizable ArrayBuffer resized after scheduling", (
       const { rab, view, expected } = makeView(0x44);
       const p = promises.write(fd, view, 0, view.byteLength, 0);
       rab.resize(SIZE / 4);
+      expect(view.byteLength).toBe(SIZE / 4);
       await p;
       expect(readFileSync(file).equals(expected)).toBe(true);
     } finally {
