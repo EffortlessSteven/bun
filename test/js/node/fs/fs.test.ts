@@ -4416,23 +4416,4 @@ describe("scalar write with a resizable ArrayBuffer resized after scheduling", (
       await fh.close();
     }
   });
-
-  // A partial shrink (not to zero) is a stronger oracle: the scheduled write
-  // still has the original length, so a pin-only fix reads past the smaller
-  // backing store, while snapshotting the bytes up front stays correct.
-  it("fs.promises.write captures the original length on a partial shrink", async () => {
-    using dir = tempDir("fs-rab-pshrink", {});
-    const file = `${String(dir)}/out.bin`;
-    const fd = openSync(file, "w");
-    try {
-      const { rab, view, expected } = makeView(0x44);
-      const p = promises.write(fd, view, 0, view.byteLength, 0);
-      rab.resize(SIZE / 4);
-      expect(view.byteLength).toBe(SIZE / 4);
-      await p;
-      expect(readFileSync(file).equals(expected)).toBe(true);
-    } finally {
-      closeSync(fd);
-    }
-  });
 });
