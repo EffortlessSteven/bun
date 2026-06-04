@@ -53,13 +53,13 @@ jobs:
             ~/.cargo/bin/ripr
             ~/.cargo/bin/unsafe-review
             ${{ env.CARGO_TARGET_DIR }}
-          key: ub-review-gh-runner-v2-892e1bb44b7cb24753b7701b405d078f4ef11ee1-${{ runner.os }}-rust-1.95-core
+          key: ub-review-gh-runner-v2-be524219e33ff37edeab61ddc28c01250a08b492-${{ runner.os }}-rust-1.95-core
           restore-keys: |
-            ub-review-gh-runner-v2-892e1bb44b7cb24753b7701b405d078f4ef11ee1-${{ runner.os }}-rust-1.95-
+            ub-review-gh-runner-v2-be524219e33ff37edeab61ddc28c01250a08b492-${{ runner.os }}-rust-1.95-
 
       - name: Build UB review packet
         id: ub-review
-        uses: EffortlessMetrics/ub-review@892e1bb44b7cb24753b7701b405d078f4ef11ee1
+        uses: EffortlessMetrics/ub-review@be524219e33ff37edeab61ddc28c01250a08b492
         with:
           preset: bun-ub
           profile: gh-runner
