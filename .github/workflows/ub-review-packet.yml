@@ -55,13 +55,13 @@ jobs:
             ~/.cargo/bin/unsafe-review
             ~/go/bin/actionlint
             ${{ env.CARGO_TARGET_DIR }}
-          key: ub-review-gh-runner-v2-c89c206-${{ runner.os }}-rust-1.95-core
+          key: ub-review-gh-runner-v2-786dfc1-${{ runner.os }}-rust-1.95-core
           restore-keys: |
-            ub-review-gh-runner-v2-c89c206-${{ runner.os }}-rust-1.95-
+            ub-review-gh-runner-v2-786dfc1-${{ runner.os }}-rust-1.95-
 
       - name: Build UB review packet
         id: ub-review
-        uses: EffortlessMetrics/ub-review@c89c206868d6d5d4fac12a7f674bc8d6db95f129
+        uses: EffortlessMetrics/ub-review@786dfc11d046296df712383c281780250eb8401a
         with:
           preset: bun-ub
           profile: gh-runner
