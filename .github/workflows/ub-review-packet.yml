@@ -50,16 +50,18 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             ~/.cargo/bin/tokmd
+            ~/.cargo/bin/cargo-allow
             ~/.cargo/bin/ripr
             ~/.cargo/bin/unsafe-review
+            ~/go/bin/actionlint
             ${{ env.CARGO_TARGET_DIR }}
-          key: ub-review-gh-runner-v1-${{ runner.os }}-rust-1.95-core
+          key: ub-review-gh-runner-v2-c89c206-${{ runner.os }}-rust-1.95-core
           restore-keys: |
-            ub-review-gh-runner-v1-${{ runner.os }}-rust-1.95-
+            ub-review-gh-runner-v2-c89c206-${{ runner.os }}-rust-1.95-
 
       - name: Build UB review packet
         id: ub-review
-        uses: EffortlessMetrics/ub-review@v0.1
+        uses: EffortlessMetrics/ub-review@c89c206868d6d5d4fac12a7f674bc8d6db95f129
         with:
           preset: bun-ub
           profile: gh-runner
