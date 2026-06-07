@@ -3075,13 +3075,13 @@ impl<'a> Transpiler<'a> {
             options::Loader::Dataurl | options::Loader::Base64 => {
                 // The "dataurl"/"base64" loaders encode the asset during the
                 // bundle's linker pass, which transform-only mode (--no-bundle)
-                // does not run. Reaching here used to panic; report a normal
-                // build error instead.
+                // does not run; report a normal build error.
                 self.log_mut().add_error_fmt(
                     None,
                     bun_ast::Loc::EMPTY,
                     format_args!(
-                        "The \"dataurl\" and \"base64\" loaders are not supported with --no-bundle"
+                        "The \"dataurl\" and \"base64\" loaders are not supported with --no-bundle (while building \"{}\")",
+                        bstr::BStr::new(file_path.pretty),
                     ),
                 );
                 return Ok(None);
