@@ -298,6 +298,8 @@ describe("bundler", () => {
       });
       const [, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
       expect(stderr).toContain('The "dataurl" and "base64" loaders are not supported with --no-bundle');
+      // The error names the offending entry file.
+      expect(stderr).toContain("entry.txt");
       // A clean build error exits 1; a panic would crash (SIGILL, exit 132).
       expect(exitCode).toBe(1);
     });
