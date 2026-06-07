@@ -491,7 +491,9 @@ test.concurrent("bun build --server-components without --app is a normal CLI err
     stdout: "pipe",
     stderr: "pipe",
   });
-  const [, okStderr, okExitCode] = await Promise.all([ok.stdout.text(), ok.stderr.text(), ok.exited]);
-  expect(okStderr).not.toContain("error");
+  const [, , okExitCode] = await Promise.all([ok.stdout.text(), ok.stderr.text(), ok.exited]);
   expect(okExitCode).toBe(0);
+  // Positive artifact: the build actually wrote the bundle.
+  const out = await Bun.file(path.join(String(dir), "dist", "plain.js")).text();
+  expect(out).toContain("console.log");
 });
