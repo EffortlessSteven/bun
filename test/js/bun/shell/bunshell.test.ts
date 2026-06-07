@@ -115,6 +115,22 @@ describe("bunshell", () => {
     runTest("Date", TestBuilder.command`echo hello ${new Date()}`.stdout(`hello ${new Date().toString()}\n`));
     runTest("BigInt", TestBuilder.command`echo ${BigInt((2 ^ 52) - 1)}`.stdout(`${BigInt((2 ^ 52) - 1)}\n`));
     runTest("Array", TestBuilder.command`echo ${[1, 2, 3]}`.stdout(`1 2 3\n`));
+
+    test("ReadableStream as a command redirect throws a catchable error, not a crash", async () => {
+      const stream = () =>
+        new ReadableStream({
+          start(c) {
+            c.enqueue(new TextEncoder().encode("hello"));
+            c.close();
+          },
+        });
+      // ReadableStream redirects are unsupported; every direction must reject with
+      // a catchable error rather than aborting the process.
+      const re = /ReadableStream is not yet supported as a shell redirect/;
+      await expect($`cat < ${stream()}`.text()).rejects.toThrow(re);
+      await expect($`cat > ${stream()}`.text()).rejects.toThrow(re);
+      await expect($`cat 2> ${stream()}`.text()).rejects.toThrow(re);
+    });
   });
 
   describe("escape", async () => {
