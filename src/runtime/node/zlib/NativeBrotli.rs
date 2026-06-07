@@ -417,9 +417,11 @@ mod _impl {
         pub fn set_flush(&mut self, flush: c_int) {
             // Brotli operations are 0..=3. `options.flush` is range-checked in JS,
             // but the runtime `.flush(kind)` stream method is not, so a generic zlib
-            // flush constant (e.g. `Z_FINISH` = 4) can reach here. Node tolerates
-            // that (no flush boundary, no error), so map any out-of-range value to
-            // `process` instead of trapping.
+            // flush constant (e.g. `Z_FINISH` = 4) can reach here. An out-of-range
+            // value is not a valid Brotli operation: trapping aborts the process,
+            // and passing it through to the encoder hangs the stream (the behavior
+            // in Node and released Bun). Map it to `process` so no flush boundary
+            // is applied here and the stream still completes via `finishFlush`.
             self.flush = match flush {
                 1 => Op::flush,
                 2 => Op::finish,
