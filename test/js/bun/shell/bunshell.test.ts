@@ -1657,6 +1657,19 @@ describe("deno_task", () => {
     expect(stderr.length).toBe(0);
     expect(stdout.toString()).toEqual("\x1b[B\x0D");
   });
+
+  test("ReadableStream as a command stdin redirect throws a catchable error, not a crash", async () => {
+    const stream = new ReadableStream({
+      start(c) {
+        c.enqueue(new TextEncoder().encode("hello"));
+        c.close();
+      },
+    });
+    // Before the fix a ReadableStream reaching `Cmd::init_subproc_redirections`
+    // aborted the process (`panic: TODO SHELL READABLE STREAM`). It is now a
+    // catchable shell error, matching the builtin redirect path.
+    await expect($`cat < ${stream}`.text()).rejects.toThrow(/Unknown JS value used in shell/);
+  });
 });
 
 describe("if_clause", () => {
