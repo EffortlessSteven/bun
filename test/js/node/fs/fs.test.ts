@@ -4352,3 +4352,68 @@ it("fs.promises.writeFile keeps a buffer path argument attached while options ar
   expect(detachedDuringOptions).toBe(false);
   expect(readFileSync(file, "utf8")).toBe("hello world");
 });
+
+// A non-shared resizable ArrayBuffer can be resized to 0 *after* an async scalar
+// write is scheduled but before the worker reads its bytes. Pinning prevents
+// detach, not resize, so unpatched Bun materializes a Rust &[u8] from the stale
+// pre-resize pointer/length and writes garbage/partial bytes (or EFAULTs). The
+// fix snapshots the submitted bytes at schedule time, so the file must contain
+// the original bytes regardless of the post-schedule resize.
+describe("scalar write with a resizable ArrayBuffer resized after scheduling", () => {
+  const SIZE = 4 * 1024 * 1024;
+  function makeView(fill: number) {
+    const rab = new ArrayBuffer(SIZE, { maxByteLength: SIZE * 2 });
+    const view = new Uint8Array(rab);
+    view.fill(fill);
+    return { rab, view, expected: Buffer.from(view) };
+  }
+
+  it("fs.promises.write writes the submitted bytes", async () => {
+    using dir = tempDir("fs-rab-pwrite", {});
+    const file = `${String(dir)}/out.bin`;
+    const fd = openSync(file, "w");
+    try {
+      const { rab, view, expected } = makeView(0x41);
+      const p = promises.write(fd, view, 0, view.byteLength, 0);
+      rab.resize(0);
+      expect(view.byteLength).toBe(0);
+      await p;
+      expect(readFileSync(file).equals(expected)).toBe(true);
+    } finally {
+      closeSync(fd);
+    }
+  });
+
+  it("callback fs.write writes the submitted bytes", async () => {
+    using dir = tempDir("fs-rab-cbwrite", {});
+    const file = `${String(dir)}/out.bin`;
+    const fd = openSync(file, "w");
+    try {
+      const { rab, view, expected } = makeView(0x42);
+      const { promise, resolve, reject } = Promise.withResolvers<void>();
+      fs.write(fd, view, 0, view.byteLength, 0, err => (err ? reject(err) : resolve()));
+      rab.resize(0);
+      expect(view.byteLength).toBe(0);
+      await promise;
+      expect(readFileSync(file).equals(expected)).toBe(true);
+    } finally {
+      closeSync(fd);
+    }
+  });
+
+  it("FileHandle.write writes the submitted bytes", async () => {
+    using dir = tempDir("fs-rab-fhwrite", {});
+    const file = `${String(dir)}/out.bin`;
+    const fh = await promises.open(file, "w");
+    try {
+      const { rab, view, expected } = makeView(0x43);
+      const p = fh.write(view, 0, view.byteLength, 0);
+      rab.resize(0);
+      expect(view.byteLength).toBe(0);
+      await p;
+      expect(readFileSync(file).equals(expected)).toBe(true);
+    } finally {
+      await fh.close();
+    }
+  });
+});

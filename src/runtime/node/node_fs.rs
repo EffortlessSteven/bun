@@ -10,6 +10,7 @@ use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use crate::api::bun::process::event_loop_handle_to_ctx;
 use crate::webcore;
 use bun_core::Environment;
+use bun_core::zig_string::Slice as ZigStringSlice;
 use bun_core::{String as BunString, ZStr, ZigString};
 use bun_event_loop::AnyTaskWithExtraContext::AnyTaskWithExtraContext;
 use bun_event_loop::MiniEventLoop::MiniEventLoop;
@@ -3857,7 +3858,21 @@ pub mod args {
                 }
             }
             if arguments.will_be_async && matches!(args.buffer, StringOrBuffer::Buffer(_)) {
-                if let Some(pinned) = bv.as_pinned_arraybuffer(ctx) {
+                // A non-shared resizable ArrayBuffer can be `resize()`d after the
+                // write is scheduled but before the worker materializes its bytes.
+                // Pinning prevents detach/transfer, not resize, so the worker would
+                // read a stale pointer/length. Snapshot the bytes now (still on the
+                // JS thread, before any resize) into owned storage the worker reads
+                // without aliasing — the same owned-copy path async Blob input uses.
+                let resizable_unshared = args
+                    .buffer
+                    .buffer()
+                    .map(|b| b.buffer.resizable && !b.buffer.shared)
+                    .unwrap_or(false);
+                if resizable_unshared {
+                    let owned: Vec<u8> = args.buffer.slice().to_vec();
+                    args.buffer = StringOrBuffer::EncodedSlice(ZigStringSlice::init_owned(owned));
+                } else if let Some(pinned) = bv.as_pinned_arraybuffer(ctx) {
                     args.buffer = StringOrBuffer::Buffer(Buffer {
                         buffer: pinned,
                         owns_buffer: false,
