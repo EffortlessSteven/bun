@@ -783,6 +783,12 @@ impl Cmd {
                             STDERR_NO as i32,
                         )?;
                     }
+                } else if crate::webcore::ReadableStream::from_js(jsval, global)?.is_some() {
+                    // ReadableStream redirects are recognized but not yet wired up;
+                    // throw a catchable error instead of aborting the process.
+                    return Err(global.throw(format_args!(
+                        "ReadableStream is not yet supported as a shell redirect"
+                    )));
                 } else if let Some(req) = jsval.as_::<crate::webcore::Response>() {
                     // SAFETY: `as_` returns a live JSC-owned `*mut Response`.
                     let req = unsafe { &mut *req };

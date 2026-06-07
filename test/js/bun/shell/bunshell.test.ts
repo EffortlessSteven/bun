@@ -124,10 +124,12 @@ describe("bunshell", () => {
             c.close();
           },
         });
-      // ReadableStream redirects are unsupported and must reject like any other unknown JS value.
-      await expect($`cat < ${stream()}`.text()).rejects.toThrow(/Unknown JS value used in shell/);
-      await expect($`cat > ${stream()}`.text()).rejects.toThrow(/Unknown JS value used in shell/);
-      await expect($`cat 2> ${stream()}`.text()).rejects.toThrow(/Unknown JS value used in shell/);
+      // ReadableStream redirects are unsupported; every direction must reject with
+      // a catchable error rather than aborting the process.
+      const re = /ReadableStream is not yet supported as a shell redirect/;
+      await expect($`cat < ${stream()}`.text()).rejects.toThrow(re);
+      await expect($`cat > ${stream()}`.text()).rejects.toThrow(re);
+      await expect($`cat 2> ${stream()}`.text()).rejects.toThrow(re);
     });
   });
 
