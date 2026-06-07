@@ -115,6 +115,20 @@ describe("bunshell", () => {
     runTest("Date", TestBuilder.command`echo hello ${new Date()}`.stdout(`hello ${new Date().toString()}\n`));
     runTest("BigInt", TestBuilder.command`echo ${BigInt((2 ^ 52) - 1)}`.stdout(`${BigInt((2 ^ 52) - 1)}\n`));
     runTest("Array", TestBuilder.command`echo ${[1, 2, 3]}`.stdout(`1 2 3\n`));
+
+    test("ReadableStream as a command redirect throws a catchable error, not a crash", async () => {
+      const stream = () =>
+        new ReadableStream({
+          start(c) {
+            c.enqueue(new TextEncoder().encode("hello"));
+            c.close();
+          },
+        });
+      // ReadableStream redirects are unsupported and must reject like any other unknown JS value.
+      await expect($`cat < ${stream()}`.text()).rejects.toThrow(/Unknown JS value used in shell/);
+      await expect($`cat > ${stream()}`.text()).rejects.toThrow(/Unknown JS value used in shell/);
+      await expect($`cat 2> ${stream()}`.text()).rejects.toThrow(/Unknown JS value used in shell/);
+    });
   });
 
   describe("escape", async () => {
@@ -1656,20 +1670,6 @@ describe("deno_task", () => {
     expect(exitCode).toBe(0);
     expect(stderr.length).toBe(0);
     expect(stdout.toString()).toEqual("\x1b[B\x0D");
-  });
-
-  test("ReadableStream as a command redirect throws a catchable error, not a crash", async () => {
-    const stream = () =>
-      new ReadableStream({
-        start(c) {
-          c.enqueue(new TextEncoder().encode("hello"));
-          c.close();
-        },
-      });
-    // ReadableStream redirects are unsupported and must reject like any other unknown JS value.
-    await expect($`cat < ${stream()}`.text()).rejects.toThrow(/Unknown JS value used in shell/);
-    await expect($`cat > ${stream()}`.text()).rejects.toThrow(/Unknown JS value used in shell/);
-    await expect($`cat 2> ${stream()}`.text()).rejects.toThrow(/Unknown JS value used in shell/);
   });
 });
 
