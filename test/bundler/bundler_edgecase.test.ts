@@ -1,5 +1,5 @@
-import { describe, expect } from "bun:test";
-import { isBroken, isWindows } from "harness";
+import { describe, expect, test } from "bun:test";
+import { bunEnv, bunExe, isBroken, isWindows, tempDir } from "harness";
 import { join } from "node:path";
 import { itBundled } from "./expectBundled";
 
@@ -282,6 +282,28 @@ describe("bundler", () => {
       "<bun>": ['invalid loader "wtf", expected one of:'],
     },
   });
+  // A "dataurl"/"base64" entry loader with --no-bundle reached an unimplemented
+  // branch and aborted the process (panic: TODO: dataurl, base64). It is now a
+  // normal build error. Run as a subprocess so the old abort shows up as a crash
+  // exit code rather than taking down the test runner. (Not itBundled: its
+  // harness rejects the dataurl/base64 loaders before the test can run.)
+  for (const loader of ["dataurl", "base64"]) {
+    test(`bun build --no-bundle with the ${loader} loader errors instead of crashing`, async () => {
+      using dir = tempDir("dataurl-nobundle", { "entry.txt": "hello" });
+      await using proc = Bun.spawn({
+        cmd: [bunExe(), "build", "entry.txt", "--no-bundle", `--loader=.txt:${loader}`],
+        env: bunEnv,
+        cwd: String(dir),
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [stderr, exitCode] = await Promise.all([proc.stderr.text(), proc.exited]);
+      expect(stderr).toContain('The "dataurl" and "base64" loaders are not supported with --no-bundle');
+      // A clean build error exits 1; the old panic crashed (SIGILL, exit 132).
+      expect(exitCode).toBe(1);
+    });
+  }
+
   itBundled("edgecase/ScriptTagEscape", {
     todo: true,
     files: {
