@@ -404,7 +404,8 @@ export default p;
     // and the server process stays alive.
     const response = await fetch(`http://${hostname}:${port}/`);
     expect(response.status).toBe(500);
-    expect(subprocess.killed).toBe(false);
+    expect(response.statusText).toBe("Build Failed");
+    expect(subprocess.exitCode).toBe(null);
   });
 
   test("serve html with failing plugin", async () => {

@@ -561,6 +561,37 @@ impl Route {
                 let global_this = bun_opaque::opaque_deref(server.global_this());
                 let output_files = &mut bundle.output_files;
 
+                // A `[serve.static]` plugin can retype the `.html` entrypoint
+                // (e.g. `loader: "js"`), leaving a successful bundle with no
+                // HTML entry output. That is a route configuration error, not
+                // an internal invariant; fail the route like a build error
+                // (pending responses get the 500) instead of asserting below.
+                // Checked before the dev-mode success line so a failed route
+                // never prints as a green bundle.
+                if !output_files.iter().any(|f| {
+                    f.output_kind == bundler_options::OutputKind::EntryPoint
+                        && f.loader == Loader::Html
+                }) {
+                    let mut log = Log::init();
+                    log.add_error_fmt(
+                        None,
+                        bun_ast::Loc::EMPTY,
+                        format_args!(
+                            "HTML bundle for \"{}\" produced no HTML entry point (a serve plugin may have changed the entry's loader)",
+                            bstr::BStr::new(&self.bundle.path),
+                        ),
+                    );
+                    if server.config().is_development() {
+                        // Same dev-mode log print as the `BundleV2Result::Err` arm.
+                        let writer: *mut bun_core::io::Writer = bun_output::error_writer_buffered();
+                        let _ = log.print(writer);
+                        bun_output::flush();
+                    }
+                    self.state.set(State::Err(log));
+                    self.resume_pending_responses();
+                    return;
+                }
+
                 if server.config().is_development() {
                     let now = bun_core::util::Timespec::now_allow_mocked_time().ns();
                     let duration = now.saturating_sub(completion_task.started_at_ns);
@@ -578,29 +609,6 @@ impl Route {
                         byte_length as f64 / 1000.0
                     );
                     bun_output::flush();
-                }
-
-                // A `[serve.static]` plugin can retype the `.html` entrypoint
-                // (e.g. `loader: "js"`), leaving a successful bundle with no
-                // HTML entry output. That is a route configuration error, not
-                // an internal invariant; fail the route like a build error
-                // (pending responses get the 500) instead of asserting below.
-                if !output_files.iter().any(|f| {
-                    f.output_kind == bundler_options::OutputKind::EntryPoint
-                        && f.loader == Loader::Html
-                }) {
-                    let mut log = Log::init();
-                    log.add_error_fmt(
-                        None,
-                        bun_ast::Loc::EMPTY,
-                        format_args!(
-                            "HTML bundle for \"{}\" produced no HTML entry point (a serve plugin may have changed the entry's loader)",
-                            bstr::BStr::new(&self.bundle.path),
-                        ),
-                    );
-                    self.state.set(State::Err(log));
-                    self.resume_pending_responses();
-                    return;
                 }
 
                 // `AnyRoute::Static` carries
