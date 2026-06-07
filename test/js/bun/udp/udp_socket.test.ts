@@ -161,7 +161,7 @@ describe("udpSocket()", () => {
     socket.close();
   });
 
-  test("rejects an unsupported binaryType at construction instead of aborting", () => {
+  test("rejects an unsupported binaryType at construction", () => {
     // UDP supports only buffer/uint8array/arraybuffer; other BinaryType strings must be rejected.
     const construct = () => udpSocket({ socket: {}, binaryType: "int8array" as any });
     expect(construct).toThrow(/binaryType.*to be 'arraybuffer', 'uint8array', or 'buffer'/);
