@@ -28,3 +28,28 @@ test("it will create a snapshot file and directory if they don't exist", () => {
   expect(exitCode2).toBe(0);
   expect(fs.existsSync(tempDir + "/__snapshots__/new-snapshot.test.ts.snap")).toBe(true);
 });
+
+test("updating to a shorter inline snapshot truncates the stale tail", () => {
+  const tempDir = tmpdirSync();
+  const padding = "previous-much-longer-inline-snapshot-value-".repeat(8);
+  fs.writeFileSync(
+    tempDir + "/inline-shrink.test.ts",
+    `import { expect, test } from "bun:test";\n` +
+      `test("inline", () => {\n` +
+      `  expect("short").toMatchInlineSnapshot(\`"${padding}"\`);\n` +
+      `});\n`,
+  );
+
+  const { exitCode } = Bun.spawnSync({
+    cmd: [bunExe(), "test", "--update-snapshots", "inline-shrink.test.ts"],
+    cwd: tempDir,
+    env: { ...bunEnv, CI: "false" },
+  });
+
+  const rewritten = fs.readFileSync(tempDir + "/inline-shrink.test.ts", "utf8");
+  expect(rewritten).toContain('toMatchInlineSnapshot(`"short"`)');
+  // The rewrite shrinks the file; a missing/failed truncate would leave the
+  // old padding after the new content.
+  expect(rewritten).not.toContain(padding);
+  expect(exitCode).toBe(0);
+});

@@ -214,10 +214,8 @@ impl<'a> Snapshots<'a> {
         // SAFETY: VM is thread-local singleton installed before any test runs; lives for the
         // duration of the runner. Per `VirtualMachine::get` doc, callers form a short-lived borrow.
         let vm = VirtualMachine::get().as_mut();
-        let opts = js_parser::ParserOptions::init(
-            vm.transpiler.options.jsx.clone(),
-            bun_ast::Loader::Js,
-        );
+        let opts =
+            js_parser::ParserOptions::init(vm.transpiler.options.jsx.clone(), bun_ast::Loader::Js);
         // Thread a per-call arena — js_parser is bump-allocated.
         let arena = bun_alloc::Arena::new();
         let mut temp_log = bun_ast::Log::init();
@@ -823,8 +821,19 @@ impl<'a> Snapshots<'a> {
                 continue;
             }
             if result_text.len() < file_text.len() {
-                if bun_sys::ftruncate(file.file.handle, result_text.len() as i64).is_err() {
-                    panic!("Failed to update inline snapshot: File was left in an invalid state");
+                if let Err(e) = bun_sys::ftruncate(file.file.handle, result_text.len() as i64) {
+                    // The new content is already written; only a stale tail
+                    // remains. Report it like the seek/write failures above
+                    // instead of aborting the whole test run.
+                    log.add_error_fmt(
+                        &source,
+                        bun_ast::Loc { start: 0 },
+                        format_args!(
+                            "Failed to update inline snapshot: File truncation error: {} (the file may retain stale trailing content)",
+                            bstr::BStr::new(e.name()),
+                        ),
+                    );
+                    continue;
                 }
             }
         }
