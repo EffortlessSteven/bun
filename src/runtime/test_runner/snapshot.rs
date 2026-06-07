@@ -829,7 +829,7 @@ impl<'a> Snapshots<'a> {
                         &source,
                         bun_ast::Loc { start: 0 },
                         format_args!(
-                            "Failed to update inline snapshot: Truncate file error: {} (the file may keep stale trailing content)",
+                            "Failed to update inline snapshot: File truncation error: {} (the file may retain stale trailing content)",
                             bstr::BStr::new(e.name()),
                         ),
                     );
