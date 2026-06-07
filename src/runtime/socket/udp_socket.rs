@@ -358,9 +358,13 @@ impl UDPSocketConfig {
                 }
 
                 config.binary_type = match BinaryType::from_js_value(global_this, value)? {
-                    Some(BinaryType::Buffer) => BinaryType::Buffer,
-                    Some(BinaryType::Uint8Array) => BinaryType::Uint8Array,
-                    Some(BinaryType::ArrayBuffer) => BinaryType::ArrayBuffer,
+                    // The getter maps exactly these three variants; reject the rest
+                    // (same whitelist shape as `ServerWebSocket::set_binary_type`).
+                    Some(
+                        val @ (BinaryType::Buffer
+                        | BinaryType::Uint8Array
+                        | BinaryType::ArrayBuffer),
+                    ) => val,
                     _ => {
                         return Err(global_this.throw_invalid_arguments(format_args!(
                             "Expected \"socket.binaryType\" to be 'arraybuffer', 'uint8array', or 'buffer'"
