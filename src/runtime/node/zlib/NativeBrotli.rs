@@ -415,16 +415,16 @@ mod _impl {
         }
 
         pub fn set_flush(&mut self, flush: c_int) {
-            // Caller passes a valid BrotliEncoderOperation discriminant (Node
-            // zlib constants 0..=3). Exhaustive match — `Op` is `#[repr(u32)]`
-            // so the prior `c_int` bit-cast was a width hazard anyway. Out-of-
-            // range traps.
+            // Brotli operations are 0..=3. `options.flush` is range-checked in JS,
+            // but the runtime `.flush(kind)` stream method is not, so a generic zlib
+            // flush constant (e.g. `Z_FINISH` = 4) can reach here. Node tolerates
+            // that (no flush boundary, no error), so map any out-of-range value to
+            // `process` instead of trapping.
             self.flush = match flush {
-                0 => Op::process,
                 1 => Op::flush,
                 2 => Op::finish,
                 3 => Op::emit_metadata,
-                n => unreachable!("invalid BrotliEncoderOperation {n}"),
+                _ => Op::process,
             };
         }
 
