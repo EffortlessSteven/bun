@@ -163,9 +163,9 @@ describe("udpSocket()", () => {
 
   test("rejects an unsupported binaryType at construction instead of aborting", () => {
     // UDP supports only buffer/uint8array/arraybuffer; other BinaryType strings must be rejected.
-    expect(() => udpSocket({ socket: {}, binaryType: "int8array" as any })).toThrow(
-      /binaryType.*to be 'arraybuffer', 'uint8array', or 'buffer'/,
-    );
+    const construct = () => udpSocket({ socket: {}, binaryType: "int8array" as any });
+    expect(construct).toThrow(/binaryType.*to be 'arraybuffer', 'uint8array', or 'buffer'/);
+    expect(construct).toThrow(expect.objectContaining({ code: "ERR_INVALID_ARG_TYPE" }));
   });
 
   test("accepts each supported binaryType and reports it from the getter", async () => {
