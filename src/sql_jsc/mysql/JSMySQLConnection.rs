@@ -471,6 +471,13 @@ impl JSMySQLConnection {
         let vm = global_object.bun_vm().as_mut();
         let arguments = callframe.arguments();
         let hostname_str = bun_core::OwnedString::new(arguments[0].to_bun_string(global_object)?);
+        // An interior NUL would otherwise reach `connect_group` -> `ZStr::as_cstr`,
+        // whose `&CStr` view forbids interior NULs (debug_assert in debug, UB in
+        // release). Reject it here with a recoverable error before the C boundary.
+        if hostname_str.to_utf8().slice().contains(&0) {
+            return Err(global_object
+                .throw_invalid_arguments(format_args!("hostname must not contain a null byte")));
+        }
         let port = arguments[1].coerce::<i32>(global_object)?;
 
         let username_str = bun_core::OwnedString::new(arguments[2].to_bun_string(global_object)?);
