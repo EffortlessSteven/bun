@@ -35,6 +35,31 @@ describe("HTTPParser.prototype.close", () => {
   });
 });
 
+describe("HTTPParser.prototype.initialize", () => {
+  test("rejects parser types llhttp does not define", () => {
+    const parser = new HTTPParser();
+    for (const type of [99, -1, 0]) {
+      expect(() => parser.initialize(type, {})).toThrow(
+        'The "type" argument must be HTTPParser.REQUEST or HTTPParser.RESPONSE',
+      );
+    }
+    parser.close();
+  });
+
+  test("accepts REQUEST and RESPONSE", () => {
+    const parser = new HTTPParser();
+    expect(parser.initialize(HTTPParser.REQUEST, {})).toBeUndefined();
+    expect(parser.initialize(HTTPParser.RESPONSE, {})).toBeUndefined();
+    parser.close();
+  });
+
+  test("stays a no-op on a closed parser, even for an invalid type", () => {
+    const parser = new HTTPParser();
+    parser.close();
+    expect(parser.initialize(99, {})).toBeUndefined();
+  });
+});
+
 describe("HTTPParser.prototype.finish", () => {
   test("reports bytesParsed of 0 when finish() fails after a paused parse", () => {
     const parser = new HTTPParser();

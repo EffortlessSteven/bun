@@ -218,7 +218,7 @@ JSC_DEFINE_HOST_FUNCTION(jsHTTPParser_initialize, (JSGlobalObject * globalObject
         }
     }
 
-    llhttp_type_t type = static_cast<llhttp_type_t>(typeValue.toInt32(globalObject));
+    int32_t typeInt = typeValue.toInt32(globalObject);
     RETURN_IF_EXCEPTION(scope, {});
 
     JSHTTPParser* parser = dynamicDowncast<JSHTTPParser>(thisValue);
@@ -229,6 +229,15 @@ JSC_DEFINE_HOST_FUNCTION(jsHTTPParser_initialize, (JSGlobalObject * globalObject
     if (!parser->impl()) {
         return JSValue::encode(jsUndefined());
     }
+
+    // llhttp only defines request/response parser types; any other value is an
+    // invalid `llhttp_type_t` once stored in the parser (Node rejects the same
+    // input with a native assertion).
+    if (typeInt != HTTP_REQUEST && typeInt != HTTP_RESPONSE) {
+        throwTypeError(globalObject, scope, "The \"type\" argument must be HTTPParser.REQUEST or HTTPParser.RESPONSE"_s);
+        return {};
+    }
+    llhttp_type_t type = static_cast<llhttp_type_t>(typeInt);
 
     RELEASE_AND_RETURN(scope, JSValue::encode(parser->impl()->initialize(globalObject, parser, type, maxHttpHeaderSize, lenientFlags, connections)));
 }
