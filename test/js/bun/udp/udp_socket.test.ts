@@ -161,6 +161,15 @@ describe("udpSocket()", () => {
     socket.close();
   });
 
+  test("rejects an unsupported binaryType at construction instead of aborting", () => {
+    // "int8array" parses to a BinaryType variant the UDP getter does not map, so
+    // before the fix construction accepted it and reading `.binaryType` aborted the
+    // process. UDP supports only buffer/uint8array/arraybuffer; reject the rest.
+    expect(() => udpSocket({ socket: {}, binaryType: "int8array" as any })).toThrow(
+      /binaryType.*to be 'arraybuffer', 'uint8array', or 'buffer'/,
+    );
+  });
+
   test("can create a socket with given port", async () => {
     for (let i = 0; i < 30; i++) {
       const port = randomPort();
