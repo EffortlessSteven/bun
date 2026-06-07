@@ -1658,17 +1658,18 @@ describe("deno_task", () => {
     expect(stdout.toString()).toEqual("\x1b[B\x0D");
   });
 
-  test("ReadableStream as a command stdin redirect throws a catchable error, not a crash", async () => {
-    const stream = new ReadableStream({
-      start(c) {
-        c.enqueue(new TextEncoder().encode("hello"));
-        c.close();
-      },
-    });
-    // Before the fix a ReadableStream reaching `Cmd::init_subproc_redirections`
-    // aborted the process (`panic: TODO SHELL READABLE STREAM`). It is now a
-    // catchable shell error, matching the builtin redirect path.
-    await expect($`cat < ${stream}`.text()).rejects.toThrow(/Unknown JS value used in shell/);
+  test("ReadableStream as a command redirect throws a catchable error, not a crash", async () => {
+    const stream = () =>
+      new ReadableStream({
+        start(c) {
+          c.enqueue(new TextEncoder().encode("hello"));
+          c.close();
+        },
+      });
+    // ReadableStream redirects are unsupported and must reject like any other unknown JS value.
+    await expect($`cat < ${stream()}`.text()).rejects.toThrow(/Unknown JS value used in shell/);
+    await expect($`cat > ${stream()}`.text()).rejects.toThrow(/Unknown JS value used in shell/);
+    await expect($`cat 2> ${stream()}`.text()).rejects.toThrow(/Unknown JS value used in shell/);
   });
 });
 
