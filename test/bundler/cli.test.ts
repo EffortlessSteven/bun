@@ -466,3 +466,32 @@ test("multi-entry build writes each entry point into the output directory", asyn
   expect(a).toContain('"A"');
   expect(b).toContain('"B"');
 });
+
+test.concurrent("bun build --server-components without --app is a normal CLI error", async () => {
+  using dir = tempDir("build-server-components-standalone", {
+    "plain.ts": `export const x: number = 1;\nconsole.log(x);`,
+  });
+
+  await using proc = Bun.spawn({
+    cmd: [bunExe(), "build", "plain.ts", "--server-components", "--outdir", "dist"],
+    env: bunEnv,
+    cwd: String(dir),
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+  expect(stderr).toContain("--server-components requires --app");
+  expect(exitCode).toBe(1);
+
+  // The same entry without the flag still builds.
+  await using ok = Bun.spawn({
+    cmd: [bunExe(), "build", "plain.ts", "--outdir", "dist"],
+    env: bunEnv,
+    cwd: String(dir),
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [, okStderr, okExitCode] = await Promise.all([ok.stdout.text(), ok.stderr.text(), ok.exited]);
+  expect(okStderr).not.toContain("error");
+  expect(okExitCode).toBe(0);
+});

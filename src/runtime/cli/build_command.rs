@@ -77,6 +77,14 @@ impl BuildCommand {
             return crate::bake::production::build_command(ctx);
         }
 
+        // Standalone `bun build --server-components` never wires the client
+        // transpiler that `BundleV2::transpiler_for_target(Target::Browser)`
+        // requires (only the Bake path above does), so it would abort there.
+        if ctx.bundler_options.server_components {
+            bun_core::pretty_errorln!("<r><red>error<r><d>:<r> --server-components requires --app");
+            Global::exit(1);
+        }
+
         if fetcher.is_some() {
             ctx.args.packages = Some(api::PackagesMode::External);
             ctx.bundler_options.compile = false;
