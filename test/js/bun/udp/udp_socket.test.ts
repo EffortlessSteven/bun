@@ -161,6 +161,21 @@ describe("udpSocket()", () => {
     socket.close();
   });
 
+  test("rejects an unsupported binaryType at construction", () => {
+    // UDP supports only buffer/uint8array/arraybuffer; other BinaryType strings must be rejected.
+    const construct = () => udpSocket({ socket: {}, binaryType: "int8array" as any });
+    expect(construct).toThrow(/binaryType.*to be 'arraybuffer', 'uint8array', or 'buffer'/);
+    expect(construct).toThrow(expect.objectContaining({ code: "ERR_INVALID_ARG_TYPE" }));
+  });
+
+  test("accepts each supported binaryType and reports it from the getter", async () => {
+    for (const binaryType of ["buffer", "uint8array", "arraybuffer"] as const) {
+      const socket = await udpSocket({ socket: {}, binaryType });
+      expect(socket.binaryType).toBe(binaryType);
+      socket.close();
+    }
+  });
+
   test("can create a socket with given port", async () => {
     for (let i = 0; i < 30; i++) {
       const port = randomPort();
