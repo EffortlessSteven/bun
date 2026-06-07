@@ -3073,9 +3073,8 @@ impl<'a> Transpiler<'a> {
                 };
             }
             options::Loader::Dataurl | options::Loader::Base64 => {
-                // The "dataurl"/"base64" loaders encode the asset during the
-                // bundle's linker pass, which transform-only mode (--no-bundle)
-                // does not run; report a normal build error.
+                // The "dataurl"/"base64" loaders have no transform-only output
+                // implementation; report a normal build error.
                 self.log_mut().add_error_fmt(
                     None,
                     bun_ast::Loc::EMPTY,
