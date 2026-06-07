@@ -1,5 +1,5 @@
-import { describe, expect } from "bun:test";
-import { isBroken, isWindows } from "harness";
+import { describe, expect, test } from "bun:test";
+import { bunEnv, bunExe, isBroken, isWindows, tempDir } from "harness";
 import { join } from "node:path";
 import { itBundled } from "./expectBundled";
 
@@ -2540,6 +2540,55 @@ describe("bundler", () => {
         "
       `);
     },
+  });
+
+  // Deeply nested parentheses in a CSS @media condition must produce a normal
+  // build error, not overflow the native stack. Run as a subprocess so a
+  // regression to a crash shows up as a non-1 exit instead of taking down the
+  // test runner.
+  test.concurrent("deeply nested @media parens error instead of crashing", async () => {
+    const depth = 2000;
+    const css = `@media ${"(".repeat(depth)}hover${")".repeat(depth)} { .a { color: red } }`;
+    using dir = tempDir("media-nesting-depth", {
+      "entry.css": css,
+      "build.ts": `try {
+          await Bun.build({ entrypoints: ["./entry.css"], minify: true });
+          process.stdout.write("no-error\\n");
+        } catch (e) {
+          process.stdout.write("caught: " + (e.errors ?? []).map(x => String(x.message)).join(",") + "\\n");
+        }`,
+    });
+    await using proc = Bun.spawn({
+      cmd: [bunExe(), "build.ts"],
+      env: bunEnv,
+      cwd: String(dir),
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [stdout, , exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+    // A catchable build error naming the media query. A stack overflow crashes
+    // the child (SIGSEGV) and never prints this line.
+    expect(stdout).toBe("caught: Invalid media query\n");
+    expect(exitCode).toBe(0);
+  });
+
+  // A shallow @media condition still bundles.
+  test.concurrent("shallow @media parens still bundle", async () => {
+    using dir = tempDir("media-nesting-shallow", {
+      "entry.css": `@media ((hover)) { .a { color: red } }`,
+      "build.ts": `const r = await Bun.build({ entrypoints: ["./entry.css"], minify: true });
+        process.stdout.write("success=" + r.success + "\\n");`,
+    });
+    await using proc = Bun.spawn({
+      cmd: [bunExe(), "build.ts"],
+      env: bunEnv,
+      cwd: String(dir),
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [stdout, , exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+    expect(stdout).toBe("success=true\n");
+    expect(exitCode).toBe(0);
   });
 });
 

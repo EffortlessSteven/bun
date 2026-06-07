@@ -1615,11 +1615,20 @@ pub fn parse_parens_or_function<C: QueryCondition>(
     Err(location.new_unexpected_token_error(t))
 }
 
+/// Media-query conditions recurse through several native frames per nested
+/// `(`, so they exhaust the stack well before the generic `MAX_NESTING_DEPTH`
+/// (512) guard in `parse_nested_block` fires. Bound the media-query nesting
+/// separately, far below that and far above any real stylesheet.
+const MEDIA_QUERY_MAX_NESTING_DEPTH: u32 = 128;
+
 fn parse_paren_block<C: QueryCondition>(
     input: &mut Parser,
     flags: QueryConditionFlags,
     options: &css::ParserOptions,
 ) -> Result<C> {
+    if input.input.nesting_depth >= MEDIA_QUERY_MAX_NESTING_DEPTH {
+        return Err(input.new_custom_error(css::ParserError::invalid_media_query));
+    }
     input.parse_nested_block(|i| {
         if let Ok(inner) =
             i.try_parse(|i2| parse_query_condition_with_options::<C>(i2, flags, options))
