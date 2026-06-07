@@ -358,6 +358,56 @@ export default p;
 `);
   });
 
+  test("plugin retyping the HTML entrypoint is a build error, not a crash", async () => {
+    const dir = tempDirWithFiles("bun-serve-html-entry-retype", {
+      "bunfig.toml": /* toml */ `
+[serve.static]
+plugins = ["./plugin.ts"]
+`,
+      "index.html": /* html */ `
+<!DOCTYPE html>
+<html>
+<body>
+  <h1>hi</h1>
+</body>
+</html>
+`,
+      "plugin.ts": /* ts */ `
+import type { BunPlugin } from "bun";
+
+const p: BunPlugin = {
+  name: "retype-entry",
+  setup(build) {
+    // Retype the HTML entrypoint itself, so the bundle has no HTML entry output.
+    build.onLoad({ filter: /index\\.html$/ }, () => {
+      return {
+        loader: "js",
+        contents: "console.log('not html');",
+      };
+    });
+  },
+};
+
+export default p;
+`,
+    });
+
+    const {
+      subprocess: subprocess1,
+      port,
+      hostname,
+    } = await waitForServer(dir, {
+      "/": join(dir, "index.html"),
+    });
+    await using subprocess = subprocess1;
+    // The route build fails like any other build error: the request gets a 500
+    // and the server process stays alive.
+    const response = await fetch(`http://${hostname}:${port}/`);
+    expect(response.status).toBe(500);
+    expect(response.statusText).toBe("Build Failed");
+    expect(subprocess.exitCode).toBe(null);
+  });
+
   test("serve html with failing plugin", async () => {
     const dir = tempDirWithFiles("html-css-js-failing-plugin", {
       "bunfig.toml": /* toml */ `
