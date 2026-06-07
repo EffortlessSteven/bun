@@ -525,9 +525,23 @@ fn on_received_data(global: &JSGlobalObject, frame: &CallFrame) -> JsResult<JSVa
                     return Ok(JSValue::UNDEFINED);
                 }
                 if let Some(array_buffer) = data_arg.as_array_buffer(global) {
-                    // yay we can read the data
-                    let payload = array_buffer.slice();
-                    this.on_internal_receive_data(payload);
+                    // Shared or resizable backing stores are not stable enough to
+                    // form a Rust `&[u8]`: another agent can mutate (or the owner
+                    // resize) the bytes while the TLS receive path reads them.
+                    // Snapshot into owned bytes (copied in C++) before Rust forms a
+                    // slice, then feed the owned payload to the synchronous
+                    // `BIO_write`. Fixed unshared input keeps the borrowed fast path.
+                    if (array_buffer.shared || array_buffer.resizable)
+                        && !array_buffer.is_detached()
+                        && array_buffer.byte_len > 0
+                    {
+                        let owned = snapshot_shared_array_buffer_bytes(global, &array_buffer)?;
+                        this.on_internal_receive_data(&owned);
+                    } else {
+                        // yay we can read the data
+                        let payload = array_buffer.slice();
+                        this.on_internal_receive_data(payload);
+                    }
                 } else {
                     // node.js errors in this case with the same error, lets keep it consistent
                     let error_value = global
@@ -543,6 +557,54 @@ fn on_received_data(global: &JSGlobalObject, frame: &CallFrame) -> JsResult<JSVa
         }
     }
     Ok(JSValue::UNDEFINED)
+}
+
+/// Copy a shared or resizable ArrayBuffer's bytes into owned storage before Rust
+/// forms a `&[u8]`. The copy runs in C++ (`Bun__createArrayBufferForCopy`), so
+/// Rust never aliases the (possibly concurrently mutated) shared backing store;
+/// it only reads the fresh, non-shared copy. The owned bytes only need to live
+/// through the synchronous `on_internal_receive_data` -> `BIO_write`, which
+/// appends into BIO-owned storage.
+fn snapshot_shared_array_buffer_bytes(
+    global: &JSGlobalObject,
+    buffer: &bun_jsc::ArrayBuffer,
+) -> JsResult<Vec<u8>> {
+    let copy = host_fn::from_js_host_call(global, || {
+        // SAFETY: `Bun__createArrayBufferForCopy` copies `byte_len` bytes from
+        // `buffer.ptr` into a fresh, non-shared ArrayBuffer. Callers only reach
+        // this helper for a live, non-detached buffer with `byte_len > 0`, so
+        // `ptr`/`byte_len` name a valid readable region and `global` is live.
+        unsafe { Bun__createArrayBufferForCopy(global, buffer.ptr.cast(), buffer.byte_len) }
+    })?;
+    let copy_buffer = copy.as_array_buffer(global).ok_or_else(|| {
+        global.throw_invalid_arguments(format_args!(
+            "Failed to snapshot shared ArrayBuffer for TLS receive"
+        ))
+    })?;
+    // The snapshot only removes the aliasing hazard if the copy is itself a
+    // fixed, non-shared buffer of the requested length. If the C++ copy contract
+    // is ever violated, error out rather than read shared/short input.
+    if copy_buffer.is_detached()
+        || copy_buffer.shared
+        || copy_buffer.resizable
+        || copy_buffer.byte_len != buffer.byte_len
+    {
+        return Err(global.throw_invalid_arguments(format_args!(
+            "snapshot of shared ArrayBuffer did not produce a stable copy"
+        )));
+    }
+    Ok(copy_buffer.byte_slice().to_vec())
+}
+
+// Declared locally: the matching extern in `bun_jsc::array_buffer` is
+// module-private, so this crate carries its own declaration until the snapshot
+// helpers consolidate across crates.
+unsafe extern "C" {
+    fn Bun__createArrayBufferForCopy(
+        global: *const JSGlobalObject,
+        ptr: *const c_void,
+        len: usize,
+    ) -> JSValue;
 }
 
 #[bun_jsc::host_fn]
