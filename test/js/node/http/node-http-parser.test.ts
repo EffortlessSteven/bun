@@ -38,22 +38,38 @@ describe("HTTPParser.prototype.close", () => {
 describe("HTTPParser.prototype.initialize", () => {
   test("rejects parser types llhttp does not define", () => {
     const parser = new HTTPParser();
-    for (const type of [99, -1, 0]) {
+    // 0 is llhttp's HTTP_BOTH, which Node also rejects; the rest stress the
+    // toInt32 boundary (NaN -> 0, INT32_MAX/MIN stay out of range).
+    for (const type of [99, -1, 0, 3, NaN, 2147483647, -2147483648]) {
       expect(() => parser.initialize(type, {})).toThrow(
         'The "type" argument must be HTTPParser.REQUEST or HTTPParser.RESPONSE',
       );
     }
+    // A rejected initialize leaves the parser usable: it never reached the
+    // native init, so a valid initialize + parse still works.
+    expect(parser.initialize(HTTPParser.REQUEST, {})).toBeUndefined();
+    const request = Buffer.from("GET / HTTP/1.1\r\nHost: example\r\n\r\n");
+    expect(parser.execute(request)).toBe(request.length);
     parser.close();
   });
 
-  test("accepts REQUEST and RESPONSE", () => {
-    const parser = new HTTPParser();
-    expect(parser.initialize(HTTPParser.REQUEST, {})).toBeUndefined();
-    expect(parser.initialize(HTTPParser.RESPONSE, {})).toBeUndefined();
-    parser.close();
+  test("accepts REQUEST and RESPONSE and parses in that mode", () => {
+    const requestParser = new HTTPParser();
+    expect(requestParser.initialize(HTTPParser.REQUEST, {})).toBeUndefined();
+    const request = Buffer.from("GET / HTTP/1.1\r\nHost: example\r\n\r\n");
+    expect(requestParser.execute(request)).toBe(request.length);
+    requestParser.close();
+
+    const responseParser = new HTTPParser();
+    expect(responseParser.initialize(HTTPParser.RESPONSE, {})).toBeUndefined();
+    const response = Buffer.from("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+    expect(responseParser.execute(response)).toBe(response.length);
+    responseParser.close();
   });
 
   test("stays a no-op on a closed parser, even for an invalid type", () => {
+    // Characterization of the preserved early return: after close() the
+    // receiver has no impl, so initialize returns undefined for any argument.
     const parser = new HTTPParser();
     parser.close();
     expect(parser.initialize(99, {})).toBeUndefined();
