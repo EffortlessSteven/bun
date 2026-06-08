@@ -241,7 +241,7 @@ mod _impl {
         }
     }
 
-    crate::__impl_compression_stream!(NativeZlib, super::Context, "NativeZlib");
+    crate::__impl_compression_stream!(NativeZlib, super::Context, "NativeZlib", 6);
     crate::__compression_stream_mixin_reexports!(NativeZlib);
 } // mod _impl
 

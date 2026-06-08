@@ -547,6 +547,6 @@ mod _impl {
     // `CompressionStreamImpl for NativeZstd`, and `pub mod js { … }` so
     // `CompressionStream::<NativeZstd>::*` (write/writeSync/reset/close/
     // emit_error/…) can reach this struct's fields.
-    crate::__impl_compression_stream!(NativeZstd, Context, "NativeZstd");
+    crate::__impl_compression_stream!(NativeZstd, Context, "NativeZstd", 6);
     crate::__compression_stream_mixin_reexports!(NativeZstd);
 } // mod _impl
