@@ -415,18 +415,16 @@ mod _impl {
         }
 
         pub fn set_flush(&mut self, flush: c_int) {
-            // Brotli operations are 0..=3. `options.flush` is range-checked in JS,
-            // but the runtime `.flush(kind)` stream method is not, so a generic zlib
-            // flush constant (e.g. `Z_FINISH` = 4) can reach here. An out-of-range
-            // value is not a valid Brotli operation: trapping aborts the process,
-            // and passing it through to the encoder hangs the stream (the behavior
-            // in Node and released Bun). Map it to `process` so no flush boundary
-            // is applied here and the stream still completes via `finishFlush`.
+            // Caller passes a valid BrotliEncoderOperation discriminant (Node
+            // zlib constants 0..=3). Exhaustive match — `Op` is `#[repr(u32)]`
+            // so the prior `c_int` bit-cast was a width hazard anyway. Out-of-
+            // range traps.
             self.flush = match flush {
+                0 => Op::process,
                 1 => Op::flush,
                 2 => Op::finish,
                 3 => Op::emit_metadata,
-                _ => Op::process,
+                n => unreachable!("invalid BrotliEncoderOperation {n}"),
             };
         }
 
@@ -560,7 +558,7 @@ mod _impl {
     // Stamps `impl CompressionContext for Context`, `impl Taskable`/
     // `CompressionStreamImpl for NativeBrotli`, and `pub mod js { … }` (the
     // `NativeBrotliPrototype__*CachedValue` accessors).
-    crate::__impl_compression_stream!(NativeBrotli, Context, "NativeBrotli");
+    crate::__impl_compression_stream!(NativeBrotli, Context, "NativeBrotli", 3);
 
     fn code_for_error(err: c::BrotliDecoderErrorCode2) -> *const core::ffi::c_char {
         // Rust has no enum reflection — expand the table by hand. Keep in sync
